@@ -1,6 +1,8 @@
 import cv2
 import pytesseract
 import time
+import picamera
+import picamera.array
 
 # Set the tesseract cmd path if necessary (uncomment and modify the line below if needed)
 # pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
@@ -11,47 +13,44 @@ def process_frame(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
     # Apply some image processing for better OCR
-    # You can adjust the parameters as needed
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
     _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)
     
     # Use pytesseract to do OCR on the processed image
     text = pytesseract.image_to_string(thresh)
-    
+
     return text
 
 def main():
-    # Initialize the camera
-    camera = cv2.VideoCapture(0)
+    # Initialize the Pi Camera
+    with picamera.PiCamera() as camera:
+        camera.resolution = (640, 480)  # Set the resolution
+        camera.framerate = 30            # Set the frame rate
+        time.sleep(2)                    # Allow the camera to warm up
 
-    if not camera.isOpened():
-        print("Error: Could not open camera.")
-        return
+        # Create an array to hold the camera frames
+        with picamera.array.PiRGBArray(camera) as output:
+            print("Press 'q' to quit.")
+            
+            for frame in camera.capture_continuous(output, format="bgr", use_video_port=True):
+                image = frame.array  # Get the current frame
+                
+                # Process the frame to extract text
+                text = process_frame(image)
+                if text.strip():  # Only print if text is found
+                    print("Extracted Text:", text.strip())
 
-    print("Press 'q' to quit.")
-    
-    while True:
-        # Capture frame-by-frame
-        ret, frame = camera.read()
-        
-        if not ret:
-            print("Error: Failed to capture image.")
-            break
+                # Show the frame
+                cv2.imshow('Pi Camera', image)
 
-        # Display the frame in a window
-        cv2.imshow('Camera', frame)
+                # Clear the output array for the next frame
+                output.truncate(0)
 
-        # Process the frame to extract text
-        text = process_frame(frame)
-        if text.strip():  # Only print if text is found
-            print("Extracted Text:", text.strip())
+                # Press 'q' to quit the window
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
 
-        # Press 'q' to quit the window
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    # Release the camera and close all OpenCV windows
-    camera.release()
+    # Close all OpenCV windows
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
